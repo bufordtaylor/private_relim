@@ -1,37 +1,68 @@
 from collections import defaultdict, deque, OrderedDict
+from pprint import pprint
 
-def _sort_transactions_by_freq(transactions, key_func, reverse_int=False,
-        reverse_ext=False, sort_ext=True):
-    key_seqs = [{key_func(i) for i in sequence} for sequence in transactions]
-    frequencies = get_frequencies(key_seqs)
+def clean_data(raw_data):
+    """takes raw data from file and makes a list of artist lists
 
-    asorted_seqs = []
-    for key_seq in key_seqs:
-        if not key_seq:
-            continue
-        # Sort each transaction (infrequent key first)
-        l = [(frequencies[i], i) for i in key_seq]
-        l.sort(reverse=reverse_int)
-        asorted_seqs.append(tuple(l))
-    # Sort all transactions. Those with infrequent key first, first
-    if sort_ext:
-        asorted_seqs.sort(reverse=reverse_ext)
+        raw_data example:
+            'Radiohead,Morrissey,Limp Bizkit\nBlur,Tool\n'
+    """
+    lines = [line for line in art_string.split('\n')]
+    return [a for a in [line.split(',') for line in lines]]
 
-    return (asorted_seqs, frequencies)
+def count_artist_frequency(user_artists):
+    """returns:
+    (list of tuples of frequency & artist set, dict of artist frequencies)
+
+        Example input:
+        (
+            ('Radiohead', 'Morrissey', 'Delays',),
+            ('Band of Horses', 'Radiohead', 'Morrissey')
+        )
 
 
-def get_frequencies(transactions):
-    '''Computes a dictionary, {key:frequencies} containing the frequency of
-       each key in all transactions. Duplicate keys in a transaction are
-       counted twice.
+        Example output:
+        ([
+            (
+                (1, 'Band of Horses'),
+                (2, 'Morrissey'),
+                (2, 'Radiohead')
+            ),
+            (
+                (1, 'Delays'),
+                (2, 'Morrissey'),
+                (2, 'Radiohead')
+            )
+         ],
+         defaultdict(<type 'int'>, {
+             'Morrissey': 2,
+             'Delays': 1,
+             'Band of Horses': 1,
+             'Radiohead': 2
+             })
+        )
+    """
+    artist_collection = []
 
-       :param transactions: a sequence of sequences. [ [transaction items...]]
-    '''
+    # make a dictionary of {artist: frequency}
+    # O(n^2)
     frequencies = defaultdict(int)
-    for transaction in transactions:
-        for item in transaction:
-            frequencies[item] += 1
-    return frequencies
+    for artists in user_artists:
+        for artist in artists:
+            frequencies[artist] += 1
+
+    # second pass to make a collection of artists with associated frequencies
+    # O(n^2)
+    for artists in user_artists:
+        # Sort each artist list (infrequent key first)
+        l = [(frequencies[artist], artist) for artist in artists]
+        l.sort()
+        artist_collection.append(tuple(l))
+
+    # Sort all user_artists. Those with infrequent key first, first
+    artist_collection.sort()
+
+    return (artist_collection, frequencies)
 
 def _new_relim_input(size, key_map):
     i = 0
@@ -45,15 +76,22 @@ def _new_relim_input(size, key_map):
 
 
 def _get_key_map(frequencies):
+    print '...'
+    print '...'
+    print 'frequencies', frequencies
     l = [(frequencies[k], k) for k in frequencies]
+    print '...'
+    print 'l', l
     l.sort(reverse=True)
     key_map = OrderedDict()
     for i, v in enumerate(l):
         key_map[v] = i
+    print '......'
+    print key_map
     return key_map
 
 
-def get_relim_input(transactions, key_func=None):
+def get_relim_input(transactions):
     '''Given a list of transactions and a key function, returns a data
        structure used as the input of the relim algorithm.
 
@@ -73,14 +111,14 @@ def get_relim_input(transactions, key_func=None):
     # relim_input[x][1][x][0] = number of times a rest of transaction appears
     # relim_input[x][1][x][1] = rest of transaction prefixed by key_freq
 
-    if key_func is None:
-        key_func = lambda e: e
-
-    (asorted_seqs, frequencies) = _sort_transactions_by_freq(transactions,
-            key_func)
+    (asorted_seqs, frequencies) = count_artist_frequency(transactions)
+    print
+    pprint((asorted_seqs, frequencies))
     key_map = _get_key_map(frequencies)
 
     relim_input = _new_relim_input(len(key_map), key_map)
+    print '................'
+    print relim_input
     for seq in asorted_seqs:
         if not seq:
             continue
@@ -130,7 +168,7 @@ def _relim(rinput, fis, report, min_support):
         if s >= min_support:
             fis.add(item[1])
             #print('Report {0} with support {1}'.format(fis, s))
-            report[frozenset(fis)] = s
+            report[tuple(fis)] = s
             b = _new_relim_input(len(a) - 1, key_map)
             rest_lists = a[-1][1]
 
@@ -162,12 +200,11 @@ def _relim(rinput, fis, report, min_support):
         a.pop()
     return n
 
-art_string = "Radiohead,Pulp,Morrissey,Delays,Stereophonics,Blur,Suede,Sleeper,The La's,Super Furry Animals\n Band of Horses,Iggy Pop,The Velvet Underground,Radiohead,The Decemberists,Morrissey,Television\n"
+art_string = "Radiohead,Pulp,Morrissey,Delays,Stereophonics,Blur,Suede,Sleeper,The La's,Super Furry Animals\n Band of Horses,Iggy Pop,The Velvet Underground,Radiohead,The Decemberists,Morrissey,Television\nPulp,Blur,Sleeper,Tool\nRadiohead,Morrissey,Limp Bizkit\nBlur,Tool\n"
 
-lines = [line for line in art_string.split('\n')]
-artists = tuple([tuple(a) for a in [line.split(',') for line in lines]])
+artists = clean_data(art_string)
+
 reliminput = get_relim_input(artists)
-from pprint import pprint
-pprint(reliminput)
+#pprint(reliminput)
 print
 pprint(relim(reliminput))
