@@ -1,5 +1,15 @@
-from collections import defaultdict, deque, OrderedDict
+from collections import defaultdict, deque, OrderedDict, namedtuple
 from pprint import pprint
+
+
+__all__ = ('relim2', 'get_relim_input2', 'clean_data')
+
+# Normally you wouldn't be declaring a global variable
+# I set an __all__ for the sake of keeping it clean
+# I'm using a namedtuple here for speed, assuming this will be handling
+# massive datasets, as it beats objects in speed tests
+# (although using slots would be fast too)
+Relim = namedtuple('Relim', 'relim_input key_map')
 
 def clean_data(raw_data):
     """takes raw data from file and makes a list of artist lists
@@ -90,8 +100,7 @@ def _get_key_map(frequencies):
     print key_map
     return key_map
 
-
-def get_relim_input(transactions):
+def get_relim_input2(transactions):
     '''Given a list of transactions and a key function, returns a data
        structure used as the input of the relim algorithm.
 
@@ -117,8 +126,9 @@ def get_relim_input(transactions):
     key_map = _get_key_map(frequencies)
 
     relim_input = _new_relim_input(len(key_map), key_map)
+    print 'key_map', key_map
     print '................'
-    print relim_input
+    print 'relim_input', relim_input
     for seq in asorted_seqs:
         if not seq:
             continue
@@ -134,10 +144,12 @@ def get_relim_input(transactions):
         if not found:
             lists.append((1, rest))
         relim_input[index] = ((count + 1, char), lists)
-    return (relim_input, key_map)
+        print '......', index
+        print relim_input[index]
+    return Relim(relim_input, key_map)
 
 
-def relim(rinput, min_support=2):
+def relim2(rinput, min_support=2):
     '''Finds frequent item sets of items appearing in a list of transactions
        based on Recursive Elimination algorithm by Christian Borgelt.
 
@@ -152,59 +164,63 @@ def relim(rinput, min_support=2):
     '''
     fis = set()
     report = {}
-    _relim(rinput, fis, report, min_support)
+    _relim2(rinput, fis, report, min_support)
     return report
 
-
-def _relim(rinput, fis, report, min_support):
-    (relim_input, key_map) = rinput
-    n = 0
+    # Data Structure
+    # relim_input[x][0] = (count, key_freq)
+    # relim_input[x][1] = [(count, (key_freq, )]
+    #
+    # in other words:
+    # relim_input[x][0][0] = count of trans with prefix key_freq
+    # relim_input[x][0][1] = prefix key_freq
+    # relim_input[x][1] = lists of transaction rests
+    # relim_input[x][1][x][0] = number of times a rest of transaction appears
+    # relim_input[x][1][x][1] = rest of transaction prefixed by key_freq
+def _relim2(rinput, fis, report, min_support):
     # Maybe this one isn't necessary
-    #a = deque(relim_input)
-    a = relim_input
-    while len(a) > 0:
-        item = a[-1][0][1]
-        s = a[-1][0][0]
+    while len(rinput.relim_input) > 0:
+        item = rinput.relim_input[-1][0][1]
+        s = rinput.relim_input[-1][0][0]
         if s >= min_support:
             fis.add(item[1])
             #print('Report {0} with support {1}'.format(fis, s))
             report[tuple(fis)] = s
-            b = _new_relim_input(len(a) - 1, key_map)
-            rest_lists = a[-1][1]
+            b = _new_relim_input(len(rinput.relim_input) - 1, rinput.key_map)
+            rest_lists = rinput.relim_input[-1][1]
 
             for (count, rest) in rest_lists:
                 if not rest:
                     continue
                 k = rest[0]
-                index = key_map[k]
+                index = rinput.key_map[k]
                 new_rest = rest[1:]
                 # Only add this rest if it's not empty!
                 ((k_count, k), lists) = b[index]
                 if len(new_rest) > 0:
                     lists.append((count, new_rest))
                 b[index] = ((k_count + count, k), lists)
-            n = n + 1 + _relim((b, key_map), fis, report, min_support)
+            _relim2(Relim(b, rinput.key_map), fis, report, min_support)
             fis.remove(item[1])
 
-        rest_lists = a[-1][1]
+        rest_lists = rinput.relim_input[-1][1]
         for (count, rest) in rest_lists:
             if not rest:
                 continue
             k = rest[0]
-            index = key_map[k]
+            index = rinput.key_map[k]
             new_rest = rest[1:]
-            ((k_count, k), lists) = a[index]
+            ((k_count, k), lists) = rinput.relim_input[index]
             if len(new_rest) > 0:
                 lists.append((count, new_rest))
-            a[index] = ((k_count + count, k), lists)
-        a.pop()
-    return n
+            rinput.relim_input[index] = ((k_count + count, k), lists)
+        rinput.relim_input.pop()
 
 art_string = "Radiohead,Pulp,Morrissey,Delays,Stereophonics,Blur,Suede,Sleeper,The La's,Super Furry Animals\n Band of Horses,Iggy Pop,The Velvet Underground,Radiohead,The Decemberists,Morrissey,Television\nPulp,Blur,Sleeper,Tool\nRadiohead,Morrissey,Limp Bizkit\nBlur,Tool\n"
 
 artists = clean_data(art_string)
 
-reliminput = get_relim_input(artists)
+reliminput = get_relim_input2(artists)
 #pprint(reliminput)
 print
-pprint(relim(reliminput))
+pprint(relim2(reliminput))
